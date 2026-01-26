@@ -2,20 +2,30 @@
 #include <WebServer.h>
 #include "DHT.h"
 #include <SPIFFS.h>
+#include <ArduinoJson.h>
 #define DHT_PIN 4
 #define DHT_TYPE DHT11
+#define RELAY1_PIN 2
+#define RELAY2_PIN 27
+
 DHT dht(DHT_PIN, DHT_TYPE);
 
 using namespace std;
 
-const char* ssidList[] = {"DESKTOP-HTELVD4 8429", "VNPT", "MindX Space" };
-const char* passList[] = {"19216819esp32", "43211234", "mindx@dream1234" };
+const char* ssidList[] = {"Phong Tin 2", "DESKTOP-HTELVD4 8429", "VNPT", "MindX Space" };
+const char* passList[] = {"88888888", "19216819esp32", "43211234", "mindx@dream1234" };
 const int wifiCount = sizeof(ssidList) / sizeof(ssidList[0]);
+
+bool p1 = 0, p2 = 0;
 
 WebServer server(80);
 
 void handleRoot() {
   String html = R"rawliteral(
+
+
+
+
 
 
 
@@ -894,30 +904,27 @@ void handleRoot() {
                         <div class="control" id="light_1_control">
                             <p class="title">Light 1</p>
                             <label class="switch">
-                                <input type="checkbox" />
+                                <input type="checkbox" onchange="toggleLight(this, 'light1')"/>
                                 <span
                                     class="slider round"
-                                    onclick="activate('light1')"
                                 ></span>
                             </label>
                         </div>
                         <div class="control" id="light_2_control">
                             <p class="title">Light 2</p>
                             <label class="switch">
-                                <input type="checkbox" />
+                                <input type="checkbox" onchange="toggleLight(this, 'light2')"/>
                                 <span
                                     class="slider round"
-                                    onclick="activate('light2')"
                                 ></span>
                             </label>
                         </div>
                         <div class="control" id="camera_1_control">
                             <p class="title">Camera 1</p>
                             <label class="switch">
-                                <input type="checkbox" checked />
+                                <input type="checkbox"/>
                                 <span
                                     class="slider round"
-                                    onclick="activate('camera1')"
                                 ></span>
                             </label>
                         </div>
@@ -949,10 +956,9 @@ void handleRoot() {
                         <div class="control" id="dht11_control">
                             <p class="title">DHT sensor</p>
                             <label class="switch">
-                                <input type="checkbox" checked />
+                                <input type="checkbox" onchange="" />
                                 <span
                                     class="slider round"
-                                    onclick="activate('DHT11')"
                                 ></span>
                             </label>
                         </div>
@@ -983,20 +989,18 @@ void handleRoot() {
                 <div class="control" id="light_1_control2">
                     <p class="title">Light 1</p>
                     <label class="switch">
-                        <input type="checkbox" />
+                        <input type="checkbox" onchange="toggleLight(this, 'light1')"/>
                         <span
                             class="slider round"
-                            onclick="activate('light1')"
                         ></span>
                     </label>
                 </div>
                 <div class="control" id="light_2_control2">
                     <p class="title">Light 2</p>
                     <label class="switch">
-                        <input type="checkbox" />
+                        <input type="checkbox" onchange="toggleLight(this, 'light2')"/>
                         <span
                             class="slider round"
-                            onclick="activate('light2')"
                         ></span>
                     </label>
                 </div>
@@ -1006,7 +1010,6 @@ void handleRoot() {
                         <input type="checkbox" checked />
                         <span
                             class="slider round"
-                            onclick="activate('camera1')"
                         ></span>
                     </label>
                 </div>
@@ -1287,10 +1290,38 @@ void handleRoot() {
             DHT11: true,
         };
 
-        function activate(x) {
-            state[x] = !state[x];
-            console.log(`${x}: ${state[x]}`);
+        function setLight(light, value) {
+            fetch("/lights", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    light: light,
+                    value: value
+                })
+            });
         }
+
+        function activate(x) {
+            state[x] = 1;
+            console.log(`${x}: ${state[x]}`);
+            setLight(x, 1);
+        }
+
+        function deactivate(x) {
+            state[x] = 0;
+            console.log(`${x}: ${state[x]}`);
+            setLight(x, 0);
+        }
+
+        function toggleLight(cb, light) {
+            const value = cb.checked ? 1 : 0;
+            if (value) activate(light);
+            else deactivate(light);
+        }
+
+
 
         const apiKey = "c26bb482498344d4b25120857250305";
 
@@ -1369,6 +1400,32 @@ void handleRoot() {
                     return NaN;
                 });
         }
+
+        function fetch_lights() {
+          fetch("/lights")
+                .then((res) => {
+                    if (!res.ok) {
+                        throw new Error("Network response was not ok");
+                    }
+                    return res.json();
+                })
+                .then((data) => {
+                    let l1 = data.p1;
+                    let l2 = data.p2;
+
+                    if (l1) console.log("Light 1 turn on");
+
+                    if (l2) console.log("Light 2 turn on");
+
+                    // document.querySelector('#light_1_control input').checked = data.p1;
+                    // document.querySelector('#light_2_control input').checked = data.p2;
+
+                })
+                .catch((error) => {
+                    return NaN;
+                });
+        }
+
         let temp1 = document.getElementById("temp_sensor_1");
         let humid1 = document.getElementById("humid_sensor_1");
         let airq1 = document.getElementById("airq_sensor_1");
@@ -1438,11 +1495,10 @@ void handleRoot() {
         setTimeout(() => {
             clear_loading();
         }, 4750);
-        setInterval(main, 1000);
+        setInterval(main, 2000);
         setInterval(setup, 900000);
     </script>
 </html>
-
 
 
   )rawliteral";
@@ -1450,7 +1506,7 @@ void handleRoot() {
   server.send(200, "text/html", html);
 }
 
-void handleDHT11() {
+void handle_hardware() {
   float h = dht.readHumidity();
   // Read temperature as Celsius (the default)
   float t = dht.readTemperature();
@@ -1463,6 +1519,45 @@ void handleDHT11() {
   server.send(200, "application/json", json);
 }
 
+void handle_lights() {
+  String json = "{";
+  json += "\"p1\":" + String(p1 ? "true" : "false") + ",";
+  json += "\"p2\":" + String(p2 ? "true" : "false");
+  json += "}";
+  server.send(200, "application/json", json);
+}
+
+void handle_set_lights() {
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"No body\"}");
+    return;
+  }
+
+  StaticJsonDocument<200> doc;
+  DeserializationError err = deserializeJson(doc, server.arg("plain"));
+
+  if (err) {
+    server.send(400, "application/json", "{\"error\":\"Bad JSON\"}");
+    return;
+  }
+
+  const char* light = doc["light"];
+  int value = doc["value"];
+
+  if (strcmp(light, "light1") == 0) p1 = value;
+  else if (strcmp(light, "light2") == 0) p2 = value;
+
+  digitalWrite(RELAY1_PIN, p1 ? HIGH : LOW);
+  digitalWrite(RELAY2_PIN, p2 ? HIGH : LOW);
+
+    String json = "{\"p1\":" + String(p1 ? "true" : "false") +
+              ",\"p2\":" + String(p2 ? "true" : "false") + "}";
+
+
+  server.send(200, "application/json", json);
+}
+
+
 bool connectToWiFi() {
   for (int i = 0; i < wifiCount; i++) {
     Serial.print("Trying to connect to ");
@@ -1470,7 +1565,7 @@ bool connectToWiFi() {
     WiFi.begin(ssidList[i], passList[i]);
 
     int timeout = 0;
-    while (WiFi.status() != WL_CONNECTED && timeout < 10) {
+    while (WiFi.status() != WL_CONNECTED && timeout < 50) {
       delay(1000);
       Serial.print(".");
       timeout++;
@@ -1503,12 +1598,22 @@ void setup() {
     startAccessPoint();
   }
   server.on("/", handleRoot);  // Serve page at root URL
-  server.on("/sensors", handleDHT11);
+  server.on("/sensors", HTTP_GET, handle_hardware);
+  server.on("/lights", HTTP_GET, handle_lights);
+  server.on("/lights", HTTP_POST, handle_set_lights);
+
   server.begin();
   Serial.println("Web server started!");
 
 
   dht.begin();
+
+    pinMode(RELAY1_PIN, OUTPUT);
+    pinMode(RELAY2_PIN, OUTPUT);
+
+    digitalWrite(RELAY1_PIN, LOW);
+    digitalWrite(RELAY2_PIN, LOW);
+
 }
 
 void loop() {
