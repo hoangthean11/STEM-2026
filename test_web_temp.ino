@@ -5,15 +5,15 @@
 #include <ArduinoJson.h>
 #define DHT_PIN 4
 #define DHT_TYPE DHT11
-#define RELAY1_PIN 2
+#define RELAY1_PIN 26
 #define RELAY2_PIN 27
 
 DHT dht(DHT_PIN, DHT_TYPE);
 
 using namespace std;
 
-const char* ssidList[] = {"Phong Tin 2", "DESKTOP-HTELVD4 8429", "VNPT", "MindX Space" };
-const char* passList[] = {"88888888", "19216819esp32", "43211234", "mindx@dream1234" };
+const char* ssidList[] = {};//{"Phong Tin 2", "DESKTOP-HTELVD4 8429"};
+const char* passList[] = {};//{"88888888", "19216819esp32"};
 const int wifiCount = sizeof(ssidList) / sizeof(ssidList[0]);
 
 bool p1 = 0, p2 = 0;
@@ -1565,7 +1565,7 @@ bool connectToWiFi() {
     WiFi.begin(ssidList[i], passList[i]);
 
     int timeout = 0;
-    while (WiFi.status() != WL_CONNECTED && timeout < 50) {
+    while (WiFi.status() != WL_CONNECTED && timeout < 20) {
       delay(1000);
       Serial.print(".");
       timeout++;
@@ -1595,8 +1595,69 @@ void setup() {
   Serial.begin(115200);
 
   if (!connectToWiFi()) {
-    startAccessPoint();
+    int serial_wifi_input_trial = 0;
+    bool ok = 0;
+
+    while (serial_wifi_input_trial < 5) {
+        String wifi_name = "", wifi_pass = "";
+
+        while (Serial.available() <= 0) {
+            delay(1000);
+            Serial.print(".");
+        }
+
+        if (Serial.available() > 0) {
+            Serial.println("Wifi name : ");
+            wifi_name = Serial.readStringUntil('\n');
+            delay(1000);
+        }
+        
+        while (Serial.available() <= 0) {
+            delay(1000);
+            Serial.print(".");
+        }
+
+        if (Serial.available() > 0) {
+            Serial.println("Wifi pass : ");
+            wifi_pass = Serial.readStringUntil('\n');
+            ok = 1;
+        }
+        if (ok) {
+            if (wifi_name != "exit") {
+                Serial.println("Connecting to : " + wifi_name + " with password : " + wifi_pass);
+
+                WiFi.begin(wifi_name, wifi_pass);
+
+                int timeout = 0;
+                while (WiFi.status() != WL_CONNECTED && timeout < 50) {
+                    delay(1000);
+                    Serial.print(".");
+                    timeout++;
+                }
+
+                if (WiFi.status() == WL_CONNECTED) {
+                    Serial.println("\nConnected!");
+                    Serial.println(WiFi.localIP());
+                    break;
+                }
+                Serial.println("\nFailed to connect.");
+
+                serial_wifi_input_trial ++;
+            }
+            else serial_wifi_input_trial = 6;
+
+            ok = 0;
+        }
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+        startAccessPoint();
+
+        Serial.println(WiFi.localIP());
+    }
   }
+
+
   server.on("/", handleRoot);  // Serve page at root URL
   server.on("/sensors", HTTP_GET, handle_hardware);
   server.on("/lights", HTTP_GET, handle_lights);
