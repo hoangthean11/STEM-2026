@@ -3,10 +3,14 @@
 #include "DHT.h"
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
+#include <ESPmDNS.h>
+
 #define DHT_PIN 4
 #define DHT_TYPE DHT11
-#define RELAY1_PIN 26
-#define RELAY2_PIN 27
+#define RELAY1_PIN 25 //đèn
+#define RELAY2_PIN 26 //quạt
+#define RELAY3_PIN 27 //máy hút ẩm
+
 
 DHT dht(DHT_PIN, DHT_TYPE);
 
@@ -16,15 +20,13 @@ const char* ssidList[] = {};//{"Phong Tin 2", "DESKTOP-HTELVD4 8429"};
 const char* passList[] = {};//{"88888888", "19216819esp32"};
 const int wifiCount = sizeof(ssidList) / sizeof(ssidList[0]);
 
-bool p1 = 0, p2 = 0;
+bool p1 = 0, p2 = 0, p3 = 0;
+float humidity = 0, temperature = 0;
 
 WebServer server(80);
 
 void handleRoot() {
   String html = R"rawliteral(
-
-
-
 
 
 
@@ -904,25 +906,25 @@ void handleRoot() {
                         <div class="control" id="light_1_control">
                             <p class="title">Light 1</p>
                             <label class="switch">
-                                <input type="checkbox" onchange="toggleLight(this, 'light1')"/>
+                                <input type="checkbox" onchange="toggle(this, 'light1')"/>
                                 <span
                                     class="slider round"
                                 ></span>
                             </label>
                         </div>
-                        <div class="control" id="light_2_control">
-                            <p class="title">Light 2</p>
+                        <div class="control" id="fan_1_control">
+                            <p class="title">Fan</p>
                             <label class="switch">
-                                <input type="checkbox" onchange="toggleLight(this, 'light2')"/>
+                                <input type="checkbox" onchange="toggle(this, 'fan')"/>
                                 <span
                                     class="slider round"
                                 ></span>
                             </label>
                         </div>
-                        <div class="control" id="camera_1_control">
-                            <p class="title">Camera 1</p>
+                        <div class="control" id="dehydrator_1_control">
+                            <p class="title">Dehydrator</p>
                             <label class="switch">
-                                <input type="checkbox"/>
+                                <input type="checkbox" onchange="toggle(this, 'dehydrator')"/>
                                 <span
                                     class="slider round"
                                 ></span>
@@ -937,7 +939,7 @@ void handleRoot() {
                             "
                         >
                             <p class="title">
-                                Camera 2 <br />
+                                Camera 1 <br />
                                 Unavailable
                             </p>
                             <div onclick="">
@@ -956,7 +958,7 @@ void handleRoot() {
                         <div class="control" id="dht11_control">
                             <p class="title">DHT sensor</p>
                             <label class="switch">
-                                <input type="checkbox" onchange="" />
+                                <input type="checkbox" checked onchange="toggle(this, "DHT11")" />
                                 <span
                                     class="slider round"
                                 ></span>
@@ -989,25 +991,25 @@ void handleRoot() {
                 <div class="control" id="light_1_control2">
                     <p class="title">Light 1</p>
                     <label class="switch">
-                        <input type="checkbox" onchange="toggleLight(this, 'light1')"/>
+                        <input type="checkbox" onchange="toggle(this, 'light1')"/>
                         <span
                             class="slider round"
                         ></span>
                     </label>
                 </div>
-                <div class="control" id="light_2_control2">
-                    <p class="title">Light 2</p>
+                <div class="control" id="fan_1_control2">
+                    <p class="title">Fan</p>
                     <label class="switch">
-                        <input type="checkbox" onchange="toggleLight(this, 'light2')"/>
+                        <input type="checkbox" onchange="toggle(this, 'fan')"/>
                         <span
                             class="slider round"
                         ></span>
                     </label>
                 </div>
-                <div class="control" id="camera_1_control2">
-                    <p class="title">Camera 1</p>
+                <div class="control" id="dehydrator_1_control2">
+                    <p class="title">Dehydrator</p>
                     <label class="switch">
-                        <input type="checkbox" checked />
+                        <input type="checkbox" onchange="toggle(this, 'dehydrator')"/>
                         <span
                             class="slider round"
                         ></span>
@@ -1019,7 +1021,7 @@ void handleRoot() {
                     style="background: rgba(54, 54, 54, 0.712); z-index: 2"
                 >
                     <p class="title">
-                        Camera 2 <br />
+                        Camera 1 <br />
                         Unavailable
                     </p>
                     <div onclick="">
@@ -1035,7 +1037,7 @@ void handleRoot() {
                 <div class="control" id="dht11_control2">
                     <p class="title">DHT sensor</p>
                     <label class="switch">
-                        <input type="checkbox" checked />
+                        <input type="checkbox" checked onclick="toggle(this, "DHT11")"/>
                         <span
                             class="slider round"
                             onclick="activate('DHT11')"
@@ -1285,8 +1287,9 @@ void handleRoot() {
 
         var state = {
             light1: false,
-            light2: false,
-            camera1: true,
+            fan: false,
+            dehydrator: false,
+            camera1: false,
             DHT11: true,
         };
 
@@ -1315,7 +1318,7 @@ void handleRoot() {
             setLight(x, 0);
         }
 
-        function toggleLight(cb, light) {
+        function toggle(cb, light) {
             const value = cb.checked ? 1 : 0;
             if (value) activate(light);
             else deactivate(light);
@@ -1386,6 +1389,7 @@ void handleRoot() {
                     return res.json();
                 })
                 .then((data) => {
+                    console.log(`${data.temperature}°C`);
                     document.getElementById(
                         "temp_sensor_1"
                     ).innerText = `${data.temperature}°C`;
@@ -1397,6 +1401,7 @@ void handleRoot() {
                     ).innerText = `${data.airQuality}`;
                 })
                 .catch((error) => {
+                    console.log(error);
                     return NaN;
                 });
         }
@@ -1412,16 +1417,30 @@ void handleRoot() {
                 .then((data) => {
                     let l1 = data.p1;
                     let l2 = data.p2;
+                    let l3 = data.p3;
 
                     if (l1) console.log("Light 1 turn on");
 
                     if (l2) console.log("Light 2 turn on");
+                    
+                    if (l3) console.log("Light 3 turn on");
 
-                    // document.querySelector('#light_1_control input').checked = data.p1;
-                    // document.querySelector('#light_2_control input').checked = data.p2;
+                    document.querySelector('#light_1_control input').checked = data.p1;
+                    document.querySelector('#fan_1_control input').checked = data.p2;
+                    document.querySelector('#dehydrator_1_control input').checked = data.p3;
+                    
+                    document.querySelector('#light_1_control2 input').checked = data.p1;
+                    document.querySelector('#fan_1_control2 input').checked = data.p2;
+                    document.querySelector('#dehydrator_1_control2 input').checked = data.p3;
+
+                    state["light1"] = data.p1;
+                    state["fan"] = data.p2;
+                    state["dehydrator"] = data.p3;
+                    
 
                 })
                 .catch((error) => {
+                    console.log(error);
                     return NaN;
                 });
         }
@@ -1485,6 +1504,7 @@ void handleRoot() {
                 new Date().toLocaleDateString();
 
             fetchSensors();
+            fetch_lights();
             console.log("finish");
         }
 
@@ -1495,10 +1515,15 @@ void handleRoot() {
         setTimeout(() => {
             clear_loading();
         }, 4750);
-        setInterval(main, 2000);
+        setInterval(main, 500);
         setInterval(setup, 900000);
     </script>
 </html>
+
+
+
+
+
 
 
   )rawliteral";
@@ -1507,54 +1532,71 @@ void handleRoot() {
 }
 
 void handle_hardware() {
-  float h = dht.readHumidity();
-  // Read temperature as Celsius (the default)
-  float t = dht.readTemperature();
-  String json = "{";
-  json += "\"temperature\":" + String(t) + ",";
-  json += "\"humidity\":" + String(h) + ",";
-  json += "\"airQuality\":" + String(h);
-  json += "}";
-  // file.printf(json);
-  server.send(200, "application/json", json);
+    humidity = dht.readHumidity();
+
+    temperature = dht.readTemperature();
+
+    String json = "{";
+    json += "\"temperature\":" + String(temperature) + ",";
+    json += "\"humidity\":" + String(humidity) + ",";
+    json += "\"airQuality\":" + String(humidity);
+    json += "}";
+    
+    server.send(200, "application/json", json);
 }
 
 void handle_lights() {
   String json = "{";
   json += "\"p1\":" + String(p1 ? "true" : "false") + ",";
-  json += "\"p2\":" + String(p2 ? "true" : "false");
+  json += "\"p2\":" + String(p2 ? "true" : "false") + ",";
+  json += "\"p3\":" + String(p3 ? "true" : "false");
   json += "}";
   server.send(200, "application/json", json);
 }
 
-void handle_set_lights() {
-  if (!server.hasArg("plain")) {
-    server.send(400, "application/json", "{\"error\":\"No body\"}");
-    return;
-  }
+void handle_logic() {
+    if (temperature > 30) {
+        p2 = 1;
+        p1 = 0;
+    }
+    else if (temperature < 15) {
+        p1 = 1;
+        p2 = 0;
+    }
 
-  StaticJsonDocument<200> doc;
-  DeserializationError err = deserializeJson(doc, server.arg("plain"));
+    if (humidity > 90) {
+        p3 = 1;
+    }
+}
 
-  if (err) {
-    server.send(400, "application/json", "{\"error\":\"Bad JSON\"}");
-    return;
-  }
+void handle_set_lights_from_web() {
+    if (!server.hasArg("plain")) {
+        server.send(400, "application/json", "{\"error\":\"No body\"}");
+        return;
+    }
 
-  const char* light = doc["light"];
-  int value = doc["value"];
+    StaticJsonDocument<200> doc;
+    DeserializationError error = deserializeJson(doc, server.arg("plain"));
 
-  if (strcmp(light, "light1") == 0) p1 = value;
-  else if (strcmp(light, "light2") == 0) p2 = value;
+    if (error) {
+        server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+        return;
+    }
 
-  digitalWrite(RELAY1_PIN, p1 ? HIGH : LOW);
-  digitalWrite(RELAY2_PIN, p2 ? HIGH : LOW);
+    String light = doc["light"]; 
+    int value = doc["value"];
 
-    String json = "{\"p1\":" + String(p1 ? "true" : "false") +
-              ",\"p2\":" + String(p2 ? "true" : "false") + "}";
+    if (light == "light1") p1 = value;
+    else if (light == "fan") p2 = value;
+    else if (light == "dehydrator") p3 = value;
 
+    handle_logic();
 
-  server.send(200, "application/json", json);
+    digitalWrite(RELAY1_PIN, p1);
+    digitalWrite(RELAY2_PIN, p2);
+    digitalWrite(RELAY3_PIN, p3);
+
+    handle_lights(); 
 }
 
 
@@ -1592,91 +1634,146 @@ void startAccessPoint() {
 
 
 void setup() {
-  Serial.begin(115200);
+    Serial.begin(115200);
 
-  if (!connectToWiFi()) {
-    int serial_wifi_input_trial = 0;
-    bool ok = 0;
+    if (!connectToWiFi()) {
+        int serial_wifi_input_trial = 0;
+        bool ok = 0;
 
-    while (serial_wifi_input_trial < 5) {
-        String wifi_name = "", wifi_pass = "";
+        while (serial_wifi_input_trial < 5) {
+            String wifi_name = "", wifi_pass = "";
 
-        while (Serial.available() <= 0) {
-            delay(1000);
-            Serial.print(".");
-        }
-
-        if (Serial.available() > 0) {
             Serial.println("Wifi name : ");
-            wifi_name = Serial.readStringUntil('\n');
-            delay(1000);
-        }
-        
-        while (Serial.available() <= 0) {
-            delay(1000);
-            Serial.print(".");
-        }
-
-        if (Serial.available() > 0) {
-            Serial.println("Wifi pass : ");
-            wifi_pass = Serial.readStringUntil('\n');
-            ok = 1;
-        }
-        if (ok) {
-            if (wifi_name != "exit") {
-                Serial.println("Connecting to : " + wifi_name + " with password : " + wifi_pass);
-
-                WiFi.begin(wifi_name, wifi_pass);
-
-                int timeout = 0;
-                while (WiFi.status() != WL_CONNECTED && timeout < 50) {
-                    delay(1000);
-                    Serial.print(".");
-                    timeout++;
-                }
-
-                if (WiFi.status() == WL_CONNECTED) {
-                    Serial.println("\nConnected!");
-                    Serial.println(WiFi.localIP());
-                    break;
-                }
-                Serial.println("\nFailed to connect.");
-
-                serial_wifi_input_trial ++;
+            while (Serial.available() <= 0) {
+                delay(1000);
+                Serial.print(".");
             }
-            else serial_wifi_input_trial = 6;
 
-            ok = 0;
+            if (Serial.available() > 0) {
+                wifi_name = Serial.readStringUntil('\n');
+                delay(1000);
+            }
+
+            Serial.println("Wifi pass : ");
+            
+            while (Serial.available() <= 0) {
+                delay(1000);
+                Serial.print(".");
+            }
+
+            if (Serial.available() > 0) {
+                wifi_pass = Serial.readStringUntil('\n');
+                ok = 1;
+            }
+            if (ok) {
+                if (wifi_name != "exit") {
+                    Serial.println("Connecting to : " + wifi_name + " with password : " + wifi_pass);
+
+                    WiFi.disconnect(true);
+
+                    delay(5000);
+                    Serial.println("Connecting...");
+
+                    WiFi.begin(wifi_name, wifi_pass);
+
+                    int timeout = 0;
+                    while (WiFi.status() != WL_CONNECTED && timeout < 100) {
+                        delay(1000);
+                        Serial.print(".");
+                        timeout++;
+                    }
+
+                    if (WiFi.status() == WL_CONNECTED) {
+                        Serial.println("\nConnected!");
+                        Serial.println(WiFi.localIP());
+
+                        break;
+                    }
+                    Serial.println("\nFailed to connect.");
+
+                    serial_wifi_input_trial ++;
+                }
+                else serial_wifi_input_trial = 6;
+
+                ok = 0;
+            }
+        }
+
+        if (WiFi.status() != WL_CONNECTED) {
+            startAccessPoint();
+
+            Serial.println(WiFi.localIP());
         }
     }
 
-    if (WiFi.status() != WL_CONNECTED) {
-        startAccessPoint();
 
-        Serial.println(WiFi.localIP());
+
+    Serial.println("Server on");
+
+    server.on("/", handleRoot);  // Serve page at root URL
+    server.on("/sensors", HTTP_GET, handle_hardware);
+    server.on("/lights", HTTP_GET, handle_lights);
+    server.on("/lights", HTTP_POST, handle_set_lights_from_web);
+
+    server.begin();
+    Serial.println("Web server started!");
+
+    if (WiFi.getMode() == WIFI_STA && WiFi.status() == WL_CONNECTED) {
+        if (!MDNS.begin("esp32")) {
+            Serial.println("mDNS failed");
+        } else {
+            MDNS.addService("http", "tcp", 80);
+            Serial.println("mDNS started");
+            Serial.println("Open: http://esp32.local");
+        }
+    } else {
+        Serial.println("mDNS skipped (not in STA mode)");
     }
-  }
 
-
-  server.on("/", handleRoot);  // Serve page at root URL
-  server.on("/sensors", HTTP_GET, handle_hardware);
-  server.on("/lights", HTTP_GET, handle_lights);
-  server.on("/lights", HTTP_POST, handle_set_lights);
-
-  server.begin();
-  Serial.println("Web server started!");
-
-
-  dht.begin();
+    dht.begin();
 
     pinMode(RELAY1_PIN, OUTPUT);
     pinMode(RELAY2_PIN, OUTPUT);
+    pinMode(RELAY3_PIN, OUTPUT);
 
     digitalWrite(RELAY1_PIN, LOW);
     digitalWrite(RELAY2_PIN, LOW);
+    digitalWrite(RELAY3_PIN, LOW);
 
 }
 
 void loop() {
-  server.handleClient();
+    server.handleClient();
+
+    // if (Serial.available() > 0) {
+    //     String code = Serial.readStringUntil('\n');
+
+    //     if (code == "change") {
+    //         while (Serial.available() <= 0) {
+    //             delay(1000);
+    //             Serial.print(".");
+    //         }
+
+    //         String type, val;
+
+    //         if (Serial.available() > 0) {
+    //             type = Serial.readStringUntil('\n');
+    //             delay(1000);
+    //         }
+
+    //         while (Serial.available() <= 0) {
+    //             delay(1000);
+    //             Serial.print(".");
+    //         }
+
+    //         if (Serial.available() > 0) {
+    //             val = Serial.readStringUntil('\n');
+    //             delay(1000);
+    //         }
+
+
+    //     }
+    // }
+
+    handle_logic();
 }
