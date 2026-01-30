@@ -16,8 +16,8 @@ DHT dht(DHT_PIN, DHT_TYPE);
 
 using namespace std;
 
-const char* ssidList[] = {};//{"Phong Tin 2", "DESKTOP-HTELVD4 8429"};
-const char* passList[] = {};//{"88888888", "19216819esp32"};
+const char* ssidList[] = {"người đẹp trai"};//{"Phong Tin 2", "DESKTOP-HTELVD4 8429"};
+const char* passList[] = {"36363636"};//{"88888888", "19216819esp32"};
 const int wifiCount = sizeof(ssidList) / sizeof(ssidList[0]);
 
 bool p1 = 0, p2 = 0, p3 = 0;
@@ -27,6 +27,8 @@ WebServer server(80);
 
 void handleRoot() {
   String html = R"rawliteral(
+
+
 
 
 
@@ -53,7 +55,7 @@ void handleRoot() {
                 --border_color: rgb(0, 132, 255);
                 --no_signal_error_red: rgba(200, 30, 30, 0.529);
                 --text_color: rgb(255, 255, 255);
-                --good_green: rgb(0, 151, 35);
+                --_green: rgb(0, 151, 35);
                 --box_shadow: var(--box_shadow);
             }
 
@@ -879,7 +881,7 @@ void handleRoot() {
                 <div class="air_rating">
                     <h2>Air Quality</h2>
                     <div class="air_quality">
-                        <h1>Good</h1>
+                        <h2 id="aq_status" style="font-size:40px">Good</h2>
                         <div class="aq">
                             <div class="air_quality_1">
                                 <h5>PM2.5</h5>
@@ -1266,16 +1268,14 @@ void handleRoot() {
         }
         function update_map(pos) {
             console.log(pos);
-            var map = L.map("your_map").setView([0, 0], 2); // Start zoomed out
-
-            // Add the OpenStreetMap tile layer
+            var map = L.map("your_map").setView([0, 0], 2);
+            
             L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
                 maxZoom: 19,
             }).addTo(map);
             map.setView(pos, 15);
             L.marker(pos).addTo(map).openPopup();
         }
-        //document.querySelector("#light_1_control > label > input[type=checkbox]")
 
         function clear_loading() {
             loading_screen = document.getElementById("loading_screen");
@@ -1335,6 +1335,26 @@ void handleRoot() {
             let data = await response.json();
             return data;
         }
+        
+        function updateAQStatus(epaIndex) {
+            const statusEl = document.getElementById("aq_status");
+            const circle = document.querySelector(".air_quality");
+
+            const map = {
+                1: { text: "Good", color: "rgb(0,151,35)" },
+                2: { text: "Moderate", color: "#f1c40f" },
+                3: { text: "Unhealthy (SG)", color: "#e67e22" },
+                4: { text: "Unhealthy", color: "#e74c3c" },
+                5: { text: "Very Unhealthy", color: "#8e44ad" },
+                6: { text: "Hazardous", color: "#2c3e50" }
+            };
+
+            const level = map[epaIndex] || map[1];
+
+            statusEl.innerText = level.text;
+            circle.style.background = level.color;
+        }
+
 
         function get_geolocation(callback) {
             if (navigator.geolocation) {
@@ -1345,7 +1365,7 @@ void handleRoot() {
                             position.coords.longitude,
                         ];
                         console.log("Geolocation success:", pos);
-                        return callback(pos); // Call the update_map function when position is ready
+                        return callback([21.1925554393877, 106.07505468684786]); // Call the update_map function when position is ready
                     },
                     function (error) {
                         console.log("Geolocation failed: " + error.message);
@@ -1378,6 +1398,9 @@ void handleRoot() {
             document.getElementById("condition").innerText = condition;
             document.getElementById("location").innerText = location;
             document.getElementById("condition_icon").src = icon;
+            document.getElementById(
+                        "airq_sensor_1"
+                    ).innerText = `${airq.co} ppm`;
         }
 
         function fetchSensors() {
@@ -1396,9 +1419,7 @@ void handleRoot() {
                     document.getElementById(
                         "humid_sensor_1"
                     ).innerText = `${data.humidity}%`;
-                    document.getElementById(
-                        "airq_sensor_1"
-                    ).innerText = `${data.airQuality}`;
+                    
                 })
                 .catch((error) => {
                     console.log(error);
@@ -1437,7 +1458,7 @@ void handleRoot() {
                     state["fan"] = data.p2;
                     state["dehydrator"] = data.p3;
                     
-
+                    console.log(state);
                 })
                 .catch((error) => {
                     console.log(error);
@@ -1448,6 +1469,7 @@ void handleRoot() {
         let temp1 = document.getElementById("temp_sensor_1");
         let humid1 = document.getElementById("humid_sensor_1");
         let airq1 = document.getElementById("airq_sensor_1");
+        
         function setup() {
             get_geolocation(async function (pos) {
                 try {
@@ -1457,8 +1479,9 @@ void handleRoot() {
                     let felling = data.current.feelslike_c;
                     let location = data.location.name;
                     let humidity = data.current.humidity;
-                    let icon = data.current.condition.icon;
+                    let icon = "https:" + data.current.condition.icon;
                     let airq = data.current.air_quality;
+
                     update(
                         icon,
                         temp,
@@ -1468,6 +1491,7 @@ void handleRoot() {
                         humidity,
                         airq
                     );
+                    updateAQStatus(airq["us-epa-index"]);
                 } catch (error) {
                     console.log("Weather API error:", error);
                 }
@@ -1515,10 +1539,13 @@ void handleRoot() {
         setTimeout(() => {
             clear_loading();
         }, 4750);
-        setInterval(main, 500);
-        setInterval(setup, 900000);
+        
+        setInterval(setup, 5000);
+        setInterval(main, 1000);
     </script>
 </html>
+
+
 
 
 
@@ -1546,6 +1573,7 @@ void handle_hardware() {
 }
 
 void handle_lights() {
+
   String json = "{";
   json += "\"p1\":" + String(p1 ? "true" : "false") + ",";
   json += "\"p2\":" + String(p2 ? "true" : "false") + ",";
@@ -1567,6 +1595,13 @@ void handle_logic() {
     if (humidity > 90) {
         p3 = 1;
     }
+    else if (humidity <= 60) {
+        p3 = 0;
+    }
+
+    digitalWrite(RELAY1_PIN, p1);
+    digitalWrite(RELAY2_PIN, p2);
+    digitalWrite(RELAY3_PIN, p3);
 }
 
 void handle_set_lights_from_web() {
@@ -1592,13 +1627,33 @@ void handle_set_lights_from_web() {
 
     handle_logic();
 
-    digitalWrite(RELAY1_PIN, p1);
-    digitalWrite(RELAY2_PIN, p2);
-    digitalWrite(RELAY3_PIN, p3);
-
     handle_lights(); 
 }
 
+void scanWiFi() {
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect(true);   // ensure not connected
+    delay(100);
+
+    int n = WiFi.scanNetworks();
+
+    if (n == 0) {
+        Serial.println("No networks found");
+    } else {
+        Serial.printf("%d networks found\n", n);
+        for (int i = 0; i < n; i++) {
+            Serial.printf(
+                "%2d: %s  RSSI: %d  %s\n",
+                i + 1,
+                WiFi.SSID(i).c_str(),
+                WiFi.RSSI(i),
+                (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) ? "open" : "secured"
+            );
+        }
+    }
+
+    WiFi.scanDelete(); // free memory
+}
 
 bool connectToWiFi() {
   for (int i = 0; i < wifiCount; i++) {
@@ -1635,6 +1690,21 @@ void startAccessPoint() {
 
 void setup() {
     Serial.begin(115200);
+
+
+    dht.begin();
+
+    delay(3000);
+
+
+    humidity = dht.readHumidity();
+
+    temperature = dht.readTemperature();
+
+    scanWiFi();
+
+
+    delay(1000);
 
     if (!connectToWiFi()) {
         int serial_wifi_input_trial = 0;
@@ -1712,9 +1782,9 @@ void setup() {
 
     server.on("/", handleRoot);  // Serve page at root URL
     server.on("/sensors", HTTP_GET, handle_hardware);
-    server.on("/lights", HTTP_GET, handle_lights);
     server.on("/lights", HTTP_POST, handle_set_lights_from_web);
-
+    server.on("/lights", HTTP_GET, handle_lights);
+    
     server.begin();
     Serial.println("Web server started!");
 
@@ -1730,11 +1800,15 @@ void setup() {
         Serial.println("mDNS skipped (not in STA mode)");
     }
 
-    dht.begin();
+
 
     pinMode(RELAY1_PIN, OUTPUT);
     pinMode(RELAY2_PIN, OUTPUT);
     pinMode(RELAY3_PIN, OUTPUT);
+
+    p1 = 0;
+    p2 = 0;
+    p3 = 0;
 
     digitalWrite(RELAY1_PIN, LOW);
     digitalWrite(RELAY2_PIN, LOW);
@@ -1743,6 +1817,10 @@ void setup() {
 }
 
 void loop() {
+    humidity = dht.readHumidity();
+
+    temperature = dht.readTemperature();
+
     server.handleClient();
 
     // if (Serial.available() > 0) {
